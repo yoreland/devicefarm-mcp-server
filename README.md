@@ -8,7 +8,9 @@ This MCP server leverages [AWS Device Farm's managed Appium endpoint feature](ht
 
 ![Appium Endpoint Architecture](images/appium-endpoint.png)
 
-> 📹 **Demo Video**: [Watch exploratory testing demo](images/Exploratory-Testing.mp4) (download to view)
+### Demo
+
+![Device Farm MCP Demo](images/demo.gif)
 
 ### Architecture Overview
 
