@@ -62,9 +62,21 @@ This MCP server leverages [AWS Device Farm's managed Appium endpoint feature](ht
 
 ## Prerequisites
 
-- Node.js v18 or higher
-- AWS credentials configured
-- AWS Device Farm project ARN
+- **Node.js** v18 or higher
+- **AWS Credentials** configured (one of the following):
+  - AWS CLI installed and configured (`aws configure`)
+  - Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
+  - IAM role (if running on EC2)
+  - AWS profile in `~/.aws/credentials`
+- **AWS Permissions**: IAM permissions for Device Farm operations:
+  - `devicefarm:CreateRemoteAccessSession`
+  - `devicefarm:GetRemoteAccessSession`
+  - `devicefarm:StopRemoteAccessSession`
+  - `devicefarm:ListDevices`
+  - `devicefarm:CreateUpload`
+  - `devicefarm:GetUpload`
+  - `devicefarm:InstallToRemoteAccessSession`
+- **AWS Device Farm Project ARN** (see Configuration section)
 
 ## Installation
 
@@ -96,7 +108,29 @@ node devicefarm-mcp-server.js
 
 ## Configuration
 
-### Update Project ARN
+### 1. AWS Credentials
+
+Ensure AWS credentials are configured. The MCP server uses the AWS SDK for JavaScript, which automatically looks for credentials in this order:
+
+1. **Environment variables**:
+   ```bash
+   export AWS_ACCESS_KEY_ID=your_access_key
+   export AWS_SECRET_ACCESS_KEY=your_secret_key
+   export AWS_REGION=us-west-2
+   ```
+
+2. **AWS CLI configuration**:
+   ```bash
+   aws configure
+   ```
+   This creates `~/.aws/credentials` and `~/.aws/config`
+
+3. **AWS Profile**:
+   ```bash
+   export AWS_PROFILE=your-profile-name
+   ```
+
+### 2. Update Project ARN
 
 Edit `devicefarm-mcp-server.js` and set your Device Farm project ARN:
 
@@ -104,7 +138,7 @@ Edit `devicefarm-mcp-server.js` and set your Device Farm project ARN:
 const PROJECT_ARN = 'arn:aws:devicefarm:us-west-2:YOUR_ACCOUNT:project:YOUR_PROJECT_ID';
 ```
 
-### MCP Client Configuration
+### 3. MCP Client Configuration
 
 Configure the MCP server in your MCP client (e.g., Amazon Q Developer CLI `~/.aws/amazonq/mcp.json`):
 
@@ -124,6 +158,10 @@ Configure the MCP server in your MCP client (e.g., Amazon Q Developer CLI `~/.aw
   }
 }
 ```
+
+**Note**: The `env` section passes AWS credentials to the MCP server. You can also use:
+- `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (not recommended for security)
+- `AWS_PROFILE` to use a specific profile from `~/.aws/credentials`
 
 Or if installed from source:
 
