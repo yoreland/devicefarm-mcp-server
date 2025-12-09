@@ -1,4 +1,43 @@
 {
+  "name": "devicefarm-mcp-server",
+  "version": "1.0.0",
+  "description": "Model Context Protocol server for AWS Device Farm mobile automation via Appium",
+  "main": "devicefarm-mcp-server.js",
+  "bin": {
+    "devicefarm-mcp-server": "./devicefarm-mcp-server.js"
+  },
+  "scripts": {
+    "start": "node devicefarm-mcp-server.js"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "aws",
+    "device-farm",
+    "appium",
+    "mobile-automation",
+    "android",
+    "ios",
+    "testing"
+  ],
+  "author": "Yoreland",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yoreland/devicefarm-mcp-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yoreland/devicefarm-mcp-server/issues"
+  },
+  "homepage": "https://github.com/yoreland/devicefarm-mcp-server#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "devicefarm-mcp-server.js",
+    "README.md",
+    "images/appium-endpoint.png"
+  ],
   "dependencies": {
     "@aws-sdk/client-device-farm": "^3.947.0",
     "@modelcontextprotocol/sdk": "^1.24.3",

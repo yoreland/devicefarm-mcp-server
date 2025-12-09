@@ -65,8 +65,21 @@ This MCP server leverages [AWS Device Farm's managed Appium endpoint feature](ht
 
 ## Installation
 
+### Option 1: NPM Package (Recommended)
+
 ```bash
+npx devicefarm-mcp-server
+```
+
+No installation needed! The package will be downloaded and executed automatically.
+
+### Option 2: From Source
+
+```bash
+git clone https://github.com/yoreland/devicefarm-mcp-server.git
+cd devicefarm-mcp-server
 npm install
+node devicefarm-mcp-server.js
 ```
 
 ## Configuration
@@ -82,6 +95,25 @@ const PROJECT_ARN = 'arn:aws:devicefarm:us-west-2:YOUR_ACCOUNT:project:YOUR_PROJ
 ### MCP Client Configuration
 
 Configure the MCP server in your MCP client (e.g., Amazon Q Developer CLI `~/.aws/amazonq/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "devicefarm": {
+      "command": "npx",
+      "args": ["devicefarm-mcp-server"],
+      "env": {
+        "AWS_REGION": "us-west-2",
+        "AWS_PROFILE": "default"
+      },
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}
+```
+
+Or if installed from source:
 
 ```json
 {
