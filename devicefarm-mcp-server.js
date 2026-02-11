@@ -9,12 +9,26 @@ const https = require('https');
 const { URL } = require('url');
 const path = require('path');
 
-const PROJECT_ARN = 'arn:aws:devicefarm:us-west-2:077090643075:project:6f9301dd-3094-44f9-ac02-675d58207909';
+validateRequiredEnvVariables();
+
+const PROJECT_ARN = process.env.PROJECT_ARN;
 let DEVICE_FARM_URL = null;
 let currentSessionArn = null;
 
 let driver = null;
 const dfClient = new DeviceFarmClient({ region: 'us-west-2' });
+
+/**
+ * Validate that all required environment variables are set.
+ */
+function validateRequiredEnvVariables() {
+  const requiredEnvVariables = ['PROJECT_ARN'];
+  const unsetEnvVariables = requiredEnvVariables.filter(variable => !process.env[variable]);
+
+  if (unsetEnvVariables.length > 0) {
+    throw new Error(`Please set the required env variable "${unsetEnvVariables.join(', ')}"`);
+  }
+}
 
 async function getDriver() {
   if (!driver && DEVICE_FARM_URL) {
@@ -42,9 +56,9 @@ async function uploadToS3(url, filePath, maxRetries = 3) {
           hostname: urlObj.hostname,
           path: urlObj.pathname + urlObj.search,
           method: 'PUT',
-          headers: { 
-            'Content-Type': 'application/octet-stream', 
-            'Content-Length': fileStats.size 
+          headers: {
+            'Content-Type': 'application/octet-stream',
+            'Content-Length': fileStats.size
           }
         };
         const req = https.request(options, (res) => {
@@ -66,24 +80,24 @@ async function waitForSessionReady(sessionArn) {
   let status = 'PENDING';
   let attempts = 0;
   const maxAttempts = 120; // 10 分钟 (120 * 5秒)
-  
+
   while (!['RUNNING', 'FAILED'].includes(status) && attempts < maxAttempts) {
     await new Promise(r => setTimeout(r, 5000));
     const getCmd = new GetRemoteAccessSessionCommand({ arn: sessionArn });
     const session = await dfClient.send(getCmd);
     status = session.remoteAccessSession.status;
-    
+
     // 如果有 endpoints，说明会话已经可用
     if (session.remoteAccessSession.endpoints?.remoteDriverEndpoint) {
       return session.remoteAccessSession;
     }
-    
+
     attempts++;
   }
-  
+
   if (status === 'FAILED') throw new Error('Session failed to start');
   if (attempts >= maxAttempts) throw new Error('Session timeout after 10 minutes');
-  
+
   // 最后再获取一次确保有最新数据
   const getCmd = new GetRemoteAccessSessionCommand({ arn: sessionArn });
   const session = await dfClient.send(getCmd);
@@ -130,38 +144,38 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (!deviceArn) {
           const listCmd = new ListDevicesCommand({ arn: PROJECT_ARN });
           const devices = await dfClient.send(listCmd);
-          let filtered = devices.devices.filter(d => 
+          let filtered = devices.devices.filter(d =>
             (!args.platform || d.platform === args.platform) && d.availability === 'AVAILABLE'
           );
-          
+
           // 如果没有 AVAILABLE 设备，尝试 HIGHLY_AVAILABLE
           if (filtered.length === 0) {
-            filtered = devices.devices.filter(d => 
+            filtered = devices.devices.filter(d =>
               (!args.platform || d.platform === args.platform) && d.availability === 'HIGHLY_AVAILABLE'
             );
           }
-          
+
           // 如果还是没有，使用任何匹配平台的设备
           if (filtered.length === 0) {
             filtered = devices.devices.filter(d => !args.platform || d.platform === args.platform);
           }
-          
+
           if (filtered.length === 0) throw new Error('No devices found');
           deviceArn = filtered[0].arn;
         }
-        
+
         let appArn = args.appArn;
         let progressLog = [];
-        
+
         // 如果提供了 apkPath，先上传
         if (args.apkPath && !appArn) {
           try {
             const apkPath = path.isAbsolute(args.apkPath) ? args.apkPath : path.resolve(process.cwd(), args.apkPath);
-            
+
             if (!fs.existsSync(apkPath)) {
               throw new Error(`APK file not found: ${apkPath}`);
             }
-            
+
             progressLog.push(`Uploading ${path.basename(apkPath)}...`);
             const fileName = path.basename(apkPath);
             const createUpCmd = new CreateUploadCommand({
@@ -172,7 +186,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const upload = await dfClient.send(createUpCmd);
             await uploadToS3(upload.upload.url, apkPath);
             progressLog.push('APK uploaded, processing...');
-            
+
             let uploadStatus = 'INITIALIZED';
             let uploadAttempts = 0;
             while (uploadStatus !== 'SUCCEEDED' && uploadStatus !== 'FAILED' && uploadAttempts < 30) {
@@ -182,7 +196,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               uploadStatus = uploadResult.upload.status;
               uploadAttempts++;
             }
-            
+
             if (uploadStatus === 'SUCCEEDED') {
               appArn = upload.upload.arn;
               progressLog.push('APK ready');
@@ -193,7 +207,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             throw new Error(`Failed to upload APK: ${uploadError.message}`);
           }
         }
-        
+
         progressLog.push('Creating session...');
         const createCmd = new CreateRemoteAccessSessionCommand({
           projectArn: PROJECT_ARN,
@@ -201,18 +215,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           name: args.sessionName || 'MCP Session',
           configuration: { billingMethod: 'METERED' }
         });
-        
+
         const session = await dfClient.send(createCmd);
         currentSessionArn = session.remoteAccessSession.arn;
         progressLog.push(`Session created: ${session.remoteAccessSession.status}`);
-        
+
         progressLog.push('Waiting for Appium endpoint...');
         const readySession = await waitForSessionReady(currentSessionArn);
         DEVICE_FARM_URL = readySession.endpoints?.remoteDriverEndpoint;
         if (!DEVICE_FARM_URL) throw new Error('No Appium endpoint available');
         driver = null;
         progressLog.push('Session ready!');
-        
+
         // 如果有 appArn，自动安装到 session
         if (appArn) {
           progressLog.push('Installing app to session...');
@@ -223,7 +237,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           await dfClient.send(installCmd);
           progressLog.push('App installed!');
         }
-        
+
         result = {
           sessionArn: readySession.arn,
           appiumEndpoint: readySession.endpoints?.remoteDriverEndpoint,
@@ -235,7 +249,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           progress: progressLog
         };
         break;
-        
+
       case 'list_devices':
         const listDevCmd = new ListDevicesCommand({ arn: PROJECT_ARN });
         const devList = await dfClient.send(listDevCmd);
@@ -248,11 +262,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           availability: d.availability
         }));
         break;
-        
+
       case 'list_active_sessions':
         const listSessionsCmd = new ListRemoteAccessSessionsCommand({ arn: PROJECT_ARN });
         const sessions = await dfClient.send(listSessionsCmd);
-        const activeSessions = sessions.remoteAccessSessions?.filter(s => 
+        const activeSessions = sessions.remoteAccessSessions?.filter(s =>
           ['RUNNING', 'PENDING', 'PENDING_CONCURRENCY', 'PENDING_DEVICE', 'PREPARING'].includes(s.status)
         ) || [];
         result = activeSessions.map(s => ({
@@ -264,7 +278,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           appiumEndpoint: s.endpoints?.remoteDriverEndpoint
         }));
         break;
-        
+
       case 'stop_session':
         if (!currentSessionArn) throw new Error('No active session');
         const stopCmd = new StopRemoteAccessSessionCommand({ arn: currentSessionArn });
@@ -274,7 +288,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         currentSessionArn = null;
         result = 'Session stopped';
         break;
-        
+
       case 'mobile_get_screen_size':
         const d = await getDriver();
         result = await d.getWindowSize();
@@ -337,10 +351,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       case 'mobile_install_app':
         if (!currentSessionArn) throw new Error('No active session');
-        
+
         const apkPath = path.isAbsolute(args.apkPath) ? args.apkPath : path.resolve(process.cwd(), args.apkPath);
         if (!fs.existsSync(apkPath)) throw new Error(`APK not found: ${apkPath}`);
-        
+
         const fileName = path.basename(apkPath);
         const createUpCmd = new CreateUploadCommand({
           projectArn: PROJECT_ARN,
@@ -349,7 +363,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         });
         const upload = await dfClient.send(createUpCmd);
         await uploadToS3(upload.upload.url, apkPath);
-        
+
         let status = 'INITIALIZED';
         let attempts = 0;
         while (status !== 'SUCCEEDED' && status !== 'FAILED' && attempts < 30) {
@@ -359,15 +373,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           status = uploadStatus.upload.status;
           attempts++;
         }
-        
+
         if (status !== 'SUCCEEDED') throw new Error('Upload failed');
-        
+
         const installCmd = new InstallToRemoteAccessSessionCommand({
           remoteAccessSessionArn: currentSessionArn,
           appArn: upload.upload.arn
         });
         await dfClient.send(installCmd);
-        
+
         result = `App installed successfully. ARN: ${upload.upload.arn}`;
         break;
       case 'mobile_uninstall_app':
@@ -384,7 +398,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
-    
+
     return { content: [{ type: 'text', text: typeof result === 'string' ? result : JSON.stringify(result, null, 2) }] };
   } catch (error) {
     return { content: [{ type: 'text', text: `Error: ${error.message}` }], isError: true };
