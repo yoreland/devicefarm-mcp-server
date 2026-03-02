@@ -130,12 +130,13 @@ Ensure AWS credentials are configured. The MCP server uses the AWS SDK for JavaS
    export AWS_PROFILE=your-profile-name
    ```
 
-### 2. Update Project ARN
+### 2. Device Farm Project ARN (Required)
 
-Edit `devicefarm-mcp-server.js` and set your Device Farm project ARN:
+**You must set your Device Farm project ARN** via the `DEVICEFARM_PROJECT_ARN` environment variable.
 
-```javascript
-const PROJECT_ARN = 'arn:aws:devicefarm:us-west-2:YOUR_ACCOUNT:project:YOUR_PROJECT_ID';
+To get your project ARN:
+```bash
+aws devicefarm list-projects --region us-west-2
 ```
 
 ### 3. MCP Client Configuration
@@ -150,7 +151,8 @@ Configure the MCP server in your MCP client (e.g., Amazon Q Developer CLI `~/.aw
       "args": ["devicefarm-mcp-server"],
       "env": {
         "AWS_REGION": "us-west-2",
-        "AWS_PROFILE": "default"
+        "AWS_PROFILE": "default",
+        "DEVICEFARM_PROJECT_ARN": "arn:aws:devicefarm:us-west-2:YOUR_ACCOUNT:project:YOUR_PROJECT_ID"
       },
       "disabled": false,
       "autoApprove": []
@@ -173,7 +175,8 @@ Or if installed from source:
       "args": ["/path/to/devicefarm-mcp-server/devicefarm-mcp-server.js"],
       "env": {
         "AWS_REGION": "us-west-2",
-        "AWS_PROFILE": "default"
+        "AWS_PROFILE": "default",
+        "DEVICEFARM_PROJECT_ARN": "arn:aws:devicefarm:us-west-2:YOUR_ACCOUNT:project:YOUR_PROJECT_ID"
       },
       "disabled": false,
       "autoApprove": []

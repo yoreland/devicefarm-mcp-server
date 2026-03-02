@@ -9,7 +9,7 @@ const https = require('https');
 const { URL } = require('url');
 const path = require('path');
 
-const PROJECT_ARN = 'arn:aws:devicefarm:us-west-2:077090643075:project:6f9301dd-3094-44f9-ac02-675d58207909';
+const PROJECT_ARN = process.env.DEVICEFARM_PROJECT_ARN || 'arn:aws:devicefarm:us-west-2:077090643075:project:6f9301dd-3094-44f9-ac02-675d58207909';
 let DEVICE_FARM_URL = null;
 let currentSessionArn = null;
 
