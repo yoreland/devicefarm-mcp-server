@@ -12,6 +12,7 @@ const path = require('path');
 const PROJECT_ARN = process.env.DEVICEFARM_PROJECT_ARN || 'arn:aws:devicefarm:us-west-2:077090643075:project:6f9301dd-3094-44f9-ac02-675d58207909';
 let DEVICE_FARM_URL = null;
 let currentSessionArn = null;
+let currentPlatform = 'ANDROID'; // Track current platform: 'ANDROID' or 'IOS'
 
 let driver = null;
 const dfClient = new DeviceFarmClient({ region: 'us-west-2' });
@@ -19,16 +20,25 @@ const dfClient = new DeviceFarmClient({ region: 'us-west-2' });
 async function getDriver() {
   if (!driver && DEVICE_FARM_URL) {
     const url = new URL(DEVICE_FARM_URL);
+    const capabilities = currentPlatform === 'IOS'
+      ? { platformName: 'iOS', 'appium:automationName': 'XCUITest' }
+      : { platformName: 'Android', 'appium:automationName': 'UiAutomator2' };
     driver = await remote({
       hostname: url.hostname,
       path: url.pathname,
       protocol: 'https',
       port: 443,
-      capabilities: { platformName: 'Android', 'appium:automationName': 'UiAutomator2' },
+      capabilities,
       logLevel: 'silent'
     });
   }
   return driver;
+}
+
+function getUploadType(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.ipa') return 'IOS_APP';
+  return 'ANDROID_APP';
 }
 
 async function uploadToS3(url, filePath, maxRetries = 3) {
@@ -167,7 +177,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const createUpCmd = new CreateUploadCommand({
               projectArn: PROJECT_ARN,
               name: fileName,
-              type: 'ANDROID_APP'
+              type: getUploadType(apkPath)
             });
             const upload = await dfClient.send(createUpCmd);
             await uploadToS3(upload.upload.url, apkPath);
@@ -195,6 +205,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
         
         progressLog.push('Creating session...');
+        
+        // Track the platform for this session
+        if (args.platform) {
+          currentPlatform = args.platform;
+        }
+        
         const createCmd = new CreateRemoteAccessSessionCommand({
           projectArn: PROJECT_ARN,
           deviceArn,
@@ -272,6 +288,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         DEVICE_FARM_URL = null;
         driver = null;
         currentSessionArn = null;
+        currentPlatform = 'ANDROID';
         result = 'Session stopped';
         break;
         
@@ -315,20 +332,38 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         result = 'Swiped';
         break;
       case 'mobile_type_keys':
-        await (await getDriver()).execute('mobile: type', { text: args.text });
+        if (currentPlatform === 'IOS') {
+          const activeElement = await (await getDriver()).getActiveElement();
+          await activeElement.setValue(args.text);
+        } else {
+          await (await getDriver()).execute('mobile: type', { text: args.text });
+        }
         result = 'Text typed';
         break;
       case 'mobile_press_button':
-        const keycode = args.button === 'home' ? 3 : 4;
-        await (await getDriver()).execute('mobile: pressKey', { keycode });
+        if (currentPlatform === 'IOS') {
+          if (args.button === 'home') {
+            await (await getDriver()).execute('mobile: pressButton', { name: 'home' });
+          } else {
+            result = `The '${args.button}' button is not supported on iOS`;
+            break;
+          }
+        } else {
+          const keycode = args.button === 'home' ? 3 : 4;
+          await (await getDriver()).execute('mobile: pressKey', { keycode });
+        }
         result = `${args.button} button pressed`;
         break;
       case 'mobile_launch_app':
-        // 使用 monkey 命令启动应用（最可靠的方式）
-        await (await getDriver()).execute('mobile: shell', {
-          command: 'monkey',
-          args: ['-p', args.appId, '-c', 'android.intent.category.LAUNCHER', '1']
-        });
+        if (currentPlatform === 'IOS') {
+          await (await getDriver()).execute('mobile: launchApp', { bundleId: args.appId });
+        } else {
+          // Use monkey command to launch app (most reliable for Android)
+          await (await getDriver()).execute('mobile: shell', {
+            command: 'monkey',
+            args: ['-p', args.appId, '-c', 'android.intent.category.LAUNCHER', '1']
+          });
+        }
         result = 'App launched';
         break;
       case 'mobile_terminate_app':
@@ -345,7 +380,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const createUpCmd = new CreateUploadCommand({
           projectArn: PROJECT_ARN,
           name: fileName,
-          type: 'ANDROID_APP'
+          type: getUploadType(apkPath)
         });
         const upload = await dfClient.send(createUpCmd);
         await uploadToS3(upload.upload.url, apkPath);
