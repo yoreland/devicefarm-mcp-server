@@ -312,23 +312,39 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         result = await (await getDriver()).getPageSource();
         break;
       case 'mobile_click_on_screen_at_coordinates':
-        await (await getDriver()).execute('mobile: clickGesture', { x: args.x, y: args.y });
+        if (currentPlatform === 'IOS') {
+          await (await getDriver()).execute('mobile: tap', { x: args.x, y: args.y });
+        } else {
+          await (await getDriver()).execute('mobile: clickGesture', { x: args.x, y: args.y });
+        }
         result = 'Clicked';
         break;
       case 'mobile_double_tap_on_screen':
-        await (await getDriver()).execute('mobile: doubleClickGesture', { x: args.x, y: args.y });
+        if (currentPlatform === 'IOS') {
+          await (await getDriver()).execute('mobile: doubleTap', { x: args.x, y: args.y });
+        } else {
+          await (await getDriver()).execute('mobile: doubleClickGesture', { x: args.x, y: args.y });
+        }
         result = 'Double tapped';
         break;
       case 'mobile_long_press_on_screen_at_coordinates':
-        await (await getDriver()).execute('mobile: longClickGesture', { x: args.x, y: args.y });
+        if (currentPlatform === 'IOS') {
+          await (await getDriver()).execute('mobile: touchAndHold', { x: args.x, y: args.y, duration: 1.5 });
+        } else {
+          await (await getDriver()).execute('mobile: longClickGesture', { x: args.x, y: args.y });
+        }
         result = 'Long pressed';
         break;
       case 'mobile_swipe_on_screen':
-        const size = await (await getDriver()).getWindowSize();
-        await (await getDriver()).execute('mobile: swipeGesture', {
-          left: 100, top: size.height / 2, width: size.width - 200, height: 100,
-          direction: args.direction, percent: args.percent || 0.75
-        });
+        if (currentPlatform === 'IOS') {
+          await (await getDriver()).execute('mobile: swipe', { direction: args.direction });
+        } else {
+          const size = await (await getDriver()).getWindowSize();
+          await (await getDriver()).execute('mobile: swipeGesture', {
+            left: 100, top: size.height / 2, width: size.width - 200, height: 100,
+            direction: args.direction, percent: args.percent || 0.75
+          });
+        }
         result = 'Swiped';
         break;
       case 'mobile_type_keys':
