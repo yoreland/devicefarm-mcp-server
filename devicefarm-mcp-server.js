@@ -35,6 +35,26 @@ async function getDriver() {
   return driver;
 }
 
+function isPreSignedUrlExpiredError(error) {
+  const msg = error?.message || '';
+  return msg.includes('Invalid pre-signed URL') || msg.includes('pre-signed') || msg.includes('ExpiredToken');
+}
+
+async function refreshDriver() {
+  if (!currentSessionArn) {
+    throw new Error('No active session to refresh');
+  }
+  const getCmd = new GetRemoteAccessSessionCommand({ arn: currentSessionArn });
+  const session = await dfClient.send(getCmd);
+  const newEndpoint = session.remoteAccessSession?.endpoints?.remoteDriverEndpoint;
+  if (!newEndpoint) {
+    throw new Error('Failed to obtain new Appium endpoint from session');
+  }
+  DEVICE_FARM_URL = newEndpoint;
+  driver = null;
+  await getDriver();
+}
+
 function getUploadType(filePath) {
   const ext = path.extname(filePath).toLowerCase();
   if (ext === '.ipa') return 'IOS_APP';
@@ -131,8 +151,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
+  const isMobileOp = name.startsWith('mobile_');
 
-  try {
+  async function executeOperation() {
     let result;
     switch (name) {
       case 'create_session':
@@ -436,8 +457,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         throw new Error(`Unknown tool: ${name}`);
     }
     
+    return result;
+  }
+
+  try {
+    const result = await executeOperation();
     return { content: [{ type: 'text', text: typeof result === 'string' ? result : JSON.stringify(result, null, 2) }] };
   } catch (error) {
+    // If it's a mobile operation and the pre-signed URL expired, refresh and retry once
+    if (isMobileOp && isPreSignedUrlExpiredError(error)) {
+      try {
+        await refreshDriver();
+        const result = await executeOperation();
+        return { content: [{ type: 'text', text: typeof result === 'string' ? result : JSON.stringify(result, null, 2) }] };
+      } catch (retryError) {
+        return { content: [{ type: 'text', text: `Error (after URL refresh retry): ${retryError.message}` }], isError: true };
+      }
+    }
     return { content: [{ type: 'text', text: `Error: ${error.message}` }], isError: true };
   }
 });
