@@ -1,6 +1,6 @@
 {
   "name": "devicefarm-mcp-server",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Model Context Protocol server for AWS Device Farm mobile automation via Appium",
   "main": "devicefarm-mcp-server.js",
   "bin": {
